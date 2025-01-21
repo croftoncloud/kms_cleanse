@@ -1,0 +1,88 @@
+name: Code Linting on Push
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  cfn-lint:
+    name: Run cfn-lint
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install cfn-lint
+        run: |
+          python -m pip install --upgrade pip
+          pip install cfn-lint
+
+      - name: Run cfn-lint
+        id: run_cfn_lint
+        run: |
+          cfn-lint cloudformation/**/*.yaml > cfn_lint_results.txt || true
+          if [ -s cfn_lint_results.txt ]; then
+            cat cfn_lint_results.txt
+          else
+            echo "CloudFormation format appears correct."
+          fi
+
+  cfn-nag:
+    name: Run cfn-nag scan
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    needs: cfn-lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Ruby and cfn-nag
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-full build-essential
+          sudo gem install cfn-nag
+
+      - name: Run cfn-nag scan
+        id: cfn_nag_scan
+        run: |
+          cfn_nag_scan --input-path cloudformation || true
+
+  pylint:
+    name: Run Pylint on Python files
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Pylint
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pylint
+        id: pylint_scan
+        run: |
+          pylint --disable=C0301 *.py || true
+          pylint --disable=C0301 modules/**/*.py || true
+          pylint --disable=C0301 utils/**/*.py || true
