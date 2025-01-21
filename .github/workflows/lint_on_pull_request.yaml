@@ -1,0 +1,131 @@
+name: Code Linting on Pull Request
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  cfn-lint:
+    name: Run cfn-lint on CloudFormation templates
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install cfn-lint
+        run: |
+          python -m pip install --upgrade pip
+          pip install cfn-lint
+
+      - name: Run cfn-lint
+        id: run_cfn_lint
+        run: |
+          cfn-lint cloudformation/**/*.yaml > cfn_lint_results.txt || true
+          if [ -s cfn_lint_results.txt ]; then
+            echo "results=$(cat cfn_lint_results.txt | sed ':a;N;$!ba;s/\r//g' | sed ':a;N;$!ba;s/\n/\\n/g')" >> $GITHUB_OUTPUT
+          else
+            echo "results=CloudFormation format appears correct." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on Pull Request
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const lintResults = `${{ steps.run_cfn_lint.outputs.results }}`;
+            const body = `## cfn-lint Results\n\`\`\`\n${lintResults}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+
+  cfn-nag:
+    name: Run cfn-nag scan on CloudFormation templates
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    needs: cfn-lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Ruby and cfn-nag
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-full build-essential
+          sudo gem install cfn-nag
+
+      - name: Run cfn-nag scan
+        id: cfn_nag_scan
+        run: |
+          cfn_nag_scan --input-path cloudformation > cfn_nag_results.txt || true
+          echo "results=$(cat cfn_nag_results.txt | sed ':a;N;$!ba;s/\r//g' | sed ':a;N;$!ba;s/\n/\\n/g')" >> $GITHUB_OUTPUT
+
+      - name: Comment on Pull Request
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const nagResults = `${{ steps.cfn_nag_scan.outputs.results }}`;
+            const body = `## cfn-nag Results\n\`\`\`\n${nagResults}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+
+  pylint:
+    name: Run Pylint on Python files
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Pylint
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pylint
+        id: pylint_scan
+        run: |
+          pylint --disable=C0301 *.py > pylint_results.txt || true
+          pylint --disable=C0301 modules/**/*.py >> pylint_results.txt || true
+          echo "results=$(cat pylint_results.txt | sed ':a;N;$!ba;s/\r//g' | sed ':a;N;$!ba;s/\n/\\n/g')" >> $GITHUB_OUTPUT
+
+      - name: Comment on Pull Request
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pylintResults = `${{ steps.pylint_scan.outputs.results }}`;
+            const body = `## Pylint Results\n\`\`\`\n${pylintResults}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
