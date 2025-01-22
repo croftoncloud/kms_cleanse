@@ -96,6 +96,10 @@ def main():
     if not aws_region:
         logging.error("AWS region not provided.")
         return
+
+    if args.profile:
+        config['aws']['account_id'] = args.profile
+
     logger.info("Starting KMS cleanse for profile: %s, region: %s", aws_profile, aws_region)
 
     accounts = determine_account_scope(config)
