@@ -190,3 +190,33 @@ def get_kms_key_arn_by_id(account_id, region, key_id):
 
     logger.warning("No matching key found for ID: %s", key_id)
     return "Key not found"
+
+def is_s3_bucket_key_enabled(account_id, region, bucket):
+    '''
+    Check if S3 Bucket Key is enabled for a given bucket.
+
+    Args:
+        account_id (str): AWS Account ID
+        region (str): AWS region name
+        bucket (str): S3 bucket name
+
+    Returns:
+        bool: True if S3 Bucket Key is enabled, False otherwise.
+    '''
+    # Initialize boto session
+    boto3.setup_default_session(profile_name=account_id, region_name=region)
+    s3_client = boto3.client('s3')
+
+    try:
+        response = s3_client.get_bucket_encryption(Bucket=bucket)
+        rules = response['ServerSideEncryptionConfiguration']['Rules']
+        for rule in rules:
+            if rule.get('BucketKeyEnabled') is True:
+                return True
+    except s3_client.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'ServerSideEncryptionConfigurationNotFoundError':
+            return False
+        logger.error("Error retrieving bucket encryption settings: %s", e)
+        raise
+
+    return False
