@@ -220,3 +220,130 @@ def is_s3_bucket_key_enabled(account_id, region, bucket):
         raise
 
     return False
+
+def check_account_public_access_block(account_id, region="us-east-1"):
+    """
+    Check if "Block Public Access" settings are enabled for the entire account in S3.
+
+    Args:
+        account_id (str): AWS Account ID
+
+    Returns:
+        bool: True if public access is blocked, False otherwise.
+    """
+    # Initialize boto session
+    boto3.setup_default_session(profile_name=account_id, region_name=region)
+    s3control_client = boto3.client('s3control')
+
+    try:
+        # Get the account-level public access block configuration
+        response = s3control_client.get_public_access_block(AccountId=account_id)
+        settings = response.get('PublicAccessBlockConfiguration', {})
+
+        # Check if all public access block settings are enabled
+        block_public_acls = settings.get('BlockPublicAcls', False)
+        ignore_public_acls = settings.get('IgnorePublicAcls', False)
+        block_public_policy = settings.get('BlockPublicPolicy', False)
+        restrict_public_buckets = settings.get('RestrictPublicBuckets', False)
+
+        all_settings_enabled = all([
+            block_public_acls,
+            ignore_public_acls,
+            block_public_policy,
+            restrict_public_buckets
+        ])
+
+        if not all_settings_enabled:
+            logger.info("Account %s Public Access Block Settings:", account_id)
+            logger.info("        %s BlockPublicAcls: %s", account_id, block_public_acls)
+            logger.info("        %s IgnorePublicAcls: %s", account_id, ignore_public_acls)
+            logger.info("        %s BlockPublicPolicy: %s", account_id, block_public_policy)
+            logger.info("        %s RestrictPublicBuckets: %s", account_id, restrict_public_buckets)
+
+        return all_settings_enabled
+
+    except s3control_client.exceptions.NoSuchPublicAccessBlockConfiguration:
+        logger.debug("         %s No Public Access Block configuration found for this account.", account_id)
+        return False
+    except Exception as e:
+        logger.error("Error checking public access block for account %s: %s", account_id, e)
+        raise
+
+def check_bucket_public_access_status(account_id, region, bucket_name):
+    """
+    Check "Public Access" status for a specific S3 bucket.
+
+    Args:
+        account_id (str): AWS Account ID
+        region (str): AWS region name
+        bucket_name (str): S3 bucket name
+
+    Returns:
+        dict: A dictionary containing the public access settings for the bucket.
+    """
+    # Initialize boto session
+    boto3.setup_default_session(profile_name=account_id, region_name=region)
+    s3_client = boto3.client('s3')
+
+    try:
+        # Get the bucket-level public access block configuration
+        response = s3_client.get_bucket_policy_status(Bucket=bucket_name)
+        policy_status = response.get('PolicyStatus', {}).get('IsPublic', False)
+
+        # Return the public access status
+        return policy_status
+
+    except s3_client.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
+            logger.debug("exception: %s, %s", bucket_name, e)
+            return "no_policy"
+        logger.error("Error checking public access block for bucket %s: %s", bucket_name, e)
+        raise
+
+def get_bucket_public_access_settings(account_id, region, bucket_name):
+    """
+    Query the individual block public access settings for an S3 bucket and return settings that are False.
+
+    Args:
+        account_id (str): AWS Account ID
+        region (str): AWS region name
+        bucket_name (str): S3 bucket name
+
+    Returns:
+        dict: A dictionary containing public access settings that are False.
+    """
+    # Initialize boto session
+    boto3.setup_default_session(profile_name=account_id, region_name=region)
+    s3_client = boto3.client('s3')
+
+    try:
+        # Get the bucket-level public access block configuration
+        response = s3_client.get_public_access_block(Bucket=bucket_name)
+        settings = response.get('PublicAccessBlockConfiguration', {})
+        block_public_acls = settings.get('BlockPublicAcls', False)
+        ignore_public_acls = settings.get('IgnorePublicAcls', False)
+        block_public_policy = settings.get('BlockPublicPolicy', False)
+        restrict_public_buckets = settings.get('RestrictPublicBuckets', False)
+
+        # log the results
+        logger.debug("Bucket %s Public Access Block Settings:", bucket_name)
+        logger.debug(" func        %s BlockPublicAcls: %s", bucket_name, block_public_acls)
+        logger.debug(" func       %s IgnorePublicAcls: %s", bucket_name, ignore_public_acls)
+        logger.debug(" func       %s BlockPublicPolicy: %s", bucket_name, block_public_policy)
+        logger.debug(" func       %s RestrictPublicBuckets: %s", bucket_name, restrict_public_buckets)
+
+        # Return the public access settings that are False
+        return {
+            'BlockPublicAcls': block_public_acls,
+            'IgnorePublicAcls': ignore_public_acls,
+            'BlockPublicPolicy': block_public_policy,
+            'RestrictPublicBuckets': restrict_public_buckets
+        }
+
+    except s3_client.exceptions.ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'NoSuchPublicAccessBlockConfiguration':
+            logger.debug("Bucket %s does not have a public access block configuration.", bucket_name)
+            return {}
+        logger.error("Error retrieving public access settings for bucket %s: %s", bucket_name, e)
+        raise
