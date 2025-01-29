@@ -48,12 +48,12 @@ Account Public Access Block check is enabled.
 
 Account: 012345678910
 Account: 012345678910 does not block public access
-         012345678910 Bucket: amazon-connect-524527b1c7a8 has no bucket policy
+         012345678910 Bucket: amazon-connect-012345678910 has no bucket policy
          012345678910 Bucket: aws-athena-query-results-us-west-2-012345678910 has no bucket policy
-         012345678910 Bucket: ca-dmv-cross-account-demo-bucket has no bucket policy
-         012345678910 Bucket: cf-templates-15etdy32qig1a-us-west-2 has no bucket policy
-         012345678910 Bucket: dmv-callback-funcs-code has no bucket policy
-         012345678910 Bucket: dmv-nodejs-lambdas-test has no bucket policy
+         012345678910 Bucket: 012345678910-account-demo-bucket has no bucket policy
+         012345678910 Bucket: cf-templates-012345678910-us-west-2 has no bucket policy
+         012345678910 Bucket: callback-funcs-code has no bucket policy
+         012345678910 Bucket: misc-nodejs-lambdas-test has no bucket policy
 ```
 
 
@@ -73,3 +73,59 @@ Account: 012345678910 does not block public access
 ├── modules
 └── README.md
 ```
+
+## Helper Utilities
+
+There are some helper scripts that were authored in projects-past that need to be udpated to current standards, but they can be used as reference to get named profiles in place. These scripts were authored to work in Windows Subsystem for Linux (WSL 2.0) on an Ubuntu-based instance.
+
+`get_saml.sh`
+
+Pair with `SAML to AWS STS Keys Conversion` Chrome extension and set it to save as credentials.txt. This script will read the credentials and feed values to aws configure. It extracts the credential values and plugs them into AWS CLI commands:
+
+```
+aws set aws_access_key_id $key --profile saml
+aws set aws_secret_access_key $value --profile saml
+aws set aws_session_token $token --profile saml
+```
+
+Usage:
+
+```
+get_saml.sh
+SAML file found.
+Checking access with saml profile
+{
+    "UserId": "AROA3O25ZDFQMQ3Y5EW:wbrady@domain.tld",
+    "Account": "012345678910",
+    "Arn": "arn:aws:sts::012345678910:assumed-role/Okta-Administrator/wbrady@domain\.tld"
+}
+Checking access with 012345678910 profile
+{
+    "UserId": "AROA3O25ZDFQMQ3Y5EW:wbrady@domain\.tld",
+    "Account": "012345678910",
+    "Arn": "arn:aws:sts::012345678910:assumed-role/Okta-Administrator/wbrady@domain\.tld"
+}
+```
+
+`setup_aws_profiles_for_assumerole.sh`
+
+If you have a role or credential that you can use across all accounts in an Organization, this script will:
+
+- Accept the named profile as input
+- Connect to the account to query all active Organization Members
+- Iterate through each account to setup a named profile with the role you specify
+
+```
+ ./setup_aws_profiles_for_assumerole.sh saml iv_secops_role
+                Setting up role profile for account: 012345678910
+                                                                -done.
+                Setting up role profile for account: 123456789101
+                                                                -done.
+                Setting up role profile for account: 234567891011
+                                                                -done.
+```
+
+`cfn-security-operations-role.yaml`
+
+This CloudFormation template can be deployed to an Organization as a StackSet from the Management Account to provide a target role for the above command and many other security-related tools.
+

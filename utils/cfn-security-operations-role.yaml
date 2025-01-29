@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Organizational Access for Security Auditors
+
+Parameters:
+  ManagementAccountId:
+    Type: String
+    Description: The account ID of the management account
+  AuditAccountId:
+    Type: String
+    Description: The account ID of the source account
+  AuditRoleName:
+    Type: String
+    Description: The name of the source role
+  TargetRoleName:
+    Type: String
+    Description: The name of the target role
+    Default: cm_secops_role
+
+Resources:
+  SecurityOperationsRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: This role is intended to allow full access by Security Operations
+          - id: W43
+            reason: This role expects a specific name to allow downstream automation consumption
+    Properties:
+      RoleName: !Ref TargetRoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: [
+                !Sub "arn:aws:iam::${AuditAccountId}:role/${AuditRoleName}",
+                !Sub "arn:aws:iam::${AuditAccountId}:root",
+                !Sub "arn:aws:iam::${ManagementAccountId}:role/${AuditRoleName}",
+                !Sub "arn:aws:iam::${ManagementAccountId}:root"
+              ]
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+        - arn:aws:iam::aws:policy/AWSSupportAccess
+
+Outputs:
+  SecurityOperationsRoleArn:
+    Description: The ARN of the security operations role
+    Value: !GetAtt SecurityOperationsRole.Arn
